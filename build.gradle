@@ -12,6 +12,9 @@ java {
 
 repositories { mavenCentral() }
 
+// rules.json 은 저장소 루트 한 곳에만 둔다. 복사본을 두면 테스트와 jar 가 다른 규칙을 보게 된다.
+sourceSets.main.resources.srcDir(layout.projectDirectory).include('rules.json')
+
 dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.2'
     testImplementation platform('org.junit:junit-bom:5.11.4')
