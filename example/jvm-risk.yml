@@ -1,0 +1,10 @@
+# 사용하는 저장소의 .github/workflows/jvm-risk.yml
+name: jvm-risk
+on: [pull_request]
+permissions: { contents: read, pull-requests: write }
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloud911948/jvm-risk-scanner@main

@@ -1,0 +1,29 @@
+name: JVM Runtime Risk Scan
+description: JDK 27 기본값 변화(G1·압축 객체 헤더), 런타임·프레임워크 EOL, 최근 고위험 CVE 를 저장소에서 진단해 PR 코멘트로 남긴다
+branding:
+  icon: shield
+  color: green
+inputs:
+  path:
+    description: 스캔할 디렉터리
+    default: .
+  comment:
+    description: PR 코멘트 작성 여부 (true/false)
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: "21"
+    - shell: bash
+      run: |
+        "${{ github.action_path }}/gradlew" -q -p "${{ github.action_path }}" fatJar
+        java -jar "${{ github.action_path }}/build/libs/jvm-risk-scanner.jar" "${{ inputs.path }}" > jvm-risk-report.md
+        cat jvm-risk-report.md >> "$GITHUB_STEP_SUMMARY"
+    - if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: gh pr comment "${{ github.event.pull_request.number }}" --body-file jvm-risk-report.md
