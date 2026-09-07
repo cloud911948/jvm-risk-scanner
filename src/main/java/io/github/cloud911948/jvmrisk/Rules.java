@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * rules.json 의 타입 모델. 규칙은 코드가 아니라 데이터이므로 새 CVE·EOL 은 JSON 한 항목으로 추가한다.
@@ -25,6 +26,20 @@ public record Rules(
         int eolWarnDays,
         List<Cve> cves,
         Map<String, Map<String, String>> bootBom) {
+
+    /** --rules 로 바꿔 끼운 파일이 섹션을 빠뜨리면 여기서 파일 단위로 알려준다. Collector 깊숙한 NPE 로 만나는 것보다 낫다. */
+    public Rules {
+        Objects.requireNonNull(version, "rules.json: version 이 없습니다");
+        Objects.requireNonNull(jdk27Defaults, "rules.json: jdk27_defaults 가 없습니다");
+        Objects.requireNonNull(eol, "rules.json: eol 이 없습니다");
+        Objects.requireNonNull(cves, "rules.json: cves 가 없습니다");
+        if (eolWarnDays <= 0) throw new IllegalArgumentException("rules.json: eol_warn_days 는 양수여야 합니다");
+        if (bootBom == null) bootBom = Map.of();
+        for (Cve c : cves) {
+            if (c.affected() == null || c.affected().stream().anyMatch(r -> r.size() != 2))
+                throw new IllegalArgumentException("rules.json: " + c.id() + " 의 affected 는 [최소, 최대] 쌍이어야 합니다");
+        }
+    }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record DefaultRule(String id, String title, String action, String severity) {}
