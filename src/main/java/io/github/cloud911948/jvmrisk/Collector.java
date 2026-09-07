@@ -12,7 +12,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
+import java.nio.file.FileVisitResult;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 
 /**
  * 빌드 파일·Dockerfile·설정에서 JDK 버전, JVM 플래그, Spring 의존성 버전, 컨테이너 이미지를 정규식으로 긁는다.
@@ -27,7 +29,7 @@ public final class Collector {
     private static final long MAX_BYTES = 2_000_000;
 
     private static final Pattern JDK_TOOLCHAIN = Pattern.compile("languageVersion\\s*(?:=|\\.set\\()?\\s*(?:JavaLanguageVersion\\.of\\()?\\s*\\(?\\s*(\\d{1,2})");
-    private static final Pattern JDK_COMPAT = Pattern.compile("(?:sourceCompatibility|targetCompatibility|maven\\.compiler\\.(?:release|source|target)|java\\.version)\\s*[=>:]*\\s*['\"]?(?:JavaVersion\\.VERSION_)?(?:1\\.)?(\\d{1,2})");
+    private static final Pattern JDK_COMPAT = Pattern.compile("(?:sourceCompatibility|targetCompatibility|maven\\.compiler\\.(?:release|source|target)|java\\.version)\\s*[=>:]*\\s*['\"]?(?:JavaVersion\\.VERSION_)?(?:1[._])?(\\d{1,2})");
     private static final Pattern JDK_IMAGE = Pattern.compile("FROM\\s+\\S*(?:temurin|openjdk|corretto|zulu|liberica|jdk|jre)[:\\-](\\d{1,2})", Pattern.CASE_INSENSITIVE);
     private static final Pattern XX_FLAG = Pattern.compile("-XX:[+\\-]\\w+(?:=\\w+)?");
     private static final Pattern AGENT = Pattern.compile("-(javaagent|agentpath|agentlib):(\\S+)");
@@ -58,23 +60,24 @@ public final class Collector {
         for (Rules.Cve c : rules.cves()) {
             if (c.evidence() != null && !c.evidence().isEmpty()) evidence.put(c.id(), Pattern.compile(String.join("|", c.evidence())));
         }
-        try (Stream<Path> walk = Files.walk(root)) {
-            walk.filter(p -> !skipped(root, p)).filter(Files::isRegularFile).forEach(p -> {
-                String name = p.getFileName().toString();
-                String ext = ext(name);
-                boolean build = BUILD_EXT.contains(ext) || ext.isEmpty() || name.startsWith("Dockerfile") || name.startsWith("docker-compose");
-                boolean source = SOURCE_EXT.contains(ext);
-                if (!build && !source) return;
-                String text = read(p);
-                if (text == null) return;
-                String rel = root.relativize(p).toString().replace('\\', '/');
-                if (build) scanBuild(f, name, text);
-                if (source && UNSAFE.matcher(text).find()) f.unsafe.add(rel);
-                // CVE 사용 흔적은 소스·빌드·설정을 가리지 않는다. 파일당 한 번 읽고 모든 CVE 패턴을 돌린다.
-                evidence.forEach((id, pat) -> {
-                    List<String> hits = f.evidence.computeIfAbsent(id, k -> new ArrayList<>());
-                    if (hits.size() < 3 && pat.matcher(text).find()) hits.add(rel);
-                });
+        try {
+            Files.walkFileTree(root, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                    // 디렉터리 이름만 본다. `bin/build` 같은 확장자 없는 스크립트 파일은 걸러지면 안 된다.
+                    return !dir.equals(root) && SKIP_DIRS.contains(dir.getFileName().toString()) ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path p, BasicFileAttributes attrs) {
+                    if (attrs.isRegularFile()) scanFile(f, root, p, evidence);
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(Path p, IOException e) {
+                    return FileVisitResult.CONTINUE; // 못 읽는 파일 하나 때문에 스캔 전체를 버리지 않는다
+                }
             });
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -84,7 +87,26 @@ public final class Collector {
         return f;
     }
 
-    private void scanBuild(Facts f, String name, String text) {
+    private void scanFile(Facts f, Path root, Path p, Map<String, Pattern> evidence) {
+        String name = p.getFileName().toString();
+        String ext = ext(name);
+        boolean build = BUILD_EXT.contains(ext) || ext.isEmpty() || name.startsWith("Dockerfile") || name.startsWith("docker-compose");
+        boolean source = SOURCE_EXT.contains(ext);
+        if (!build && !source) return;
+        String text = read(p);
+        if (text == null) return;
+        String rel = root.relativize(p).toString().replace('\\', '/');
+        // 소스 파일도 같은 정규식을 돌린다. ProcessBuilder 인자에 박힌 -XX 플래그나 테스트의 lincheck import 는 빌드 파일에 없다.
+        scanText(f, name, text);
+        if (source && UNSAFE.matcher(text).find()) f.unsafe.add(rel);
+        // CVE 사용 흔적은 소스·빌드·설정을 가리지 않는다. 파일당 한 번 읽고 모든 CVE 패턴을 돌린다.
+        evidence.forEach((id, pat) -> {
+            List<String> hits = f.evidence.computeIfAbsent(id, k -> new ArrayList<>());
+            if (hits.size() < 3 && pat.matcher(text).find()) hits.add(rel);
+        });
+    }
+
+    private void scanText(Facts f, String name, String text) {
         find(JDK_TOOLCHAIN, text, m -> f.jdk.add(m.group(1)));
         find(JDK_COMPAT, text, m -> f.jdk.add(m.group(1)));
         find(JDK_IMAGE, text, m -> f.jdk.add(m.group(1)));
@@ -129,13 +151,6 @@ public final class Collector {
                 f.src.put(k, tag);
             }
         }
-    }
-
-    private static boolean skipped(Path root, Path p) {
-        for (Path part : root.relativize(p)) {
-            if (SKIP_DIRS.contains(part.toString())) return true;
-        }
-        return false;
     }
 
     private static String read(Path p) {

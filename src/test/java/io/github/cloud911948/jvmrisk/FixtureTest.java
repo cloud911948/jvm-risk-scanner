@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FixtureTest {
 
     private static final LocalDate TODAY = LocalDate.of(2026, 9, 3);
-    private static final Rules RULES = Rules.load(Path.of("rules.json"));
+    private static final Rules RULES = Rules.bundled(); // jar 에 들어갈 것과 같은 파일
 
     private static List<Finding> scan(String dir, Facts[] out) {
         Facts f = new Collector(RULES).collect(Path.of(dir));
@@ -70,6 +70,20 @@ class FixtureTest {
         assertEquals("6.5.9", f[0].deps.get("spring-security"));
         assertEquals("bom~", f[0].src.get("spring-security"));
         assertTrue(ids.containsAll(List.of("DEP-ESTIMATED", "EOL-PAST", "EOL-SOON", "CVE-2026-59270")), ids.toString());
+    }
+
+    @Test
+    void extensionlessScriptNamedLikeSkipDirIsStillRead() throws Exception {
+        Path tmp = java.nio.file.Files.createTempDirectory("jvmrisk");
+        java.nio.file.Files.createDirectories(tmp.resolve("bin"));
+        java.nio.file.Files.writeString(tmp.resolve("bin/build"), "java -XX:+UseSerialGC -javaagent:apm.jar -jar app.jar");
+        java.nio.file.Files.createDirectories(tmp.resolve("build"));
+        java.nio.file.Files.writeString(tmp.resolve("build/generated.gradle"), "sourceCompatibility = JavaVersion.VERSION_17");
+        java.nio.file.Files.writeString(tmp.resolve("build.gradle"), "sourceCompatibility = JavaVersion.VERSION_1_8");
+        Facts f = new Collector(RULES).collect(tmp);
+        assertTrue(f.flags.contains("-XX:+UseSerialGC"), f.flags.toString());
+        assertEquals(1, f.agents.size());
+        assertEquals(Set.of("8"), f.jdk); // build/ 디렉터리는 건너뛰고, bin/build 파일은 읽고, VERSION_1_8 은 8
     }
 
     @Test
