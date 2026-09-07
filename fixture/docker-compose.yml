@@ -1,0 +1,6 @@
+services:
+  redis:
+    image: redis:8.2.7
+    command: ["redis-server","--tls-port","6379"]
+  app:
+    build: .

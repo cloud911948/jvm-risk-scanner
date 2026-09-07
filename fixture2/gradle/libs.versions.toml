@@ -1,0 +1,6 @@
+[versions]
+boot = "4.0.7"
+[libraries]
+lettuce = "io.lettuce:lettuce-core:6.8.2.RELEASE"
+[plugins]
+spring-boot = { id = "org.springframework.boot", version.ref = "boot" }
