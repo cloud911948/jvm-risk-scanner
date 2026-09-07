@@ -3,18 +3,19 @@ package io.github.cloud911948.jvmrisk;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.nio.file.FileVisitResult;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
 
 /**
  * 빌드 파일·Dockerfile·설정에서 JDK 버전, JVM 플래그, Spring 의존성 버전, 컨테이너 이미지를 정규식으로 긁는다.
@@ -101,8 +102,9 @@ public final class Collector {
         if (source && UNSAFE.matcher(text).find()) f.unsafe.add(rel);
         // CVE 사용 흔적은 소스·빌드·설정을 가리지 않는다. 파일당 한 번 읽고 모든 CVE 패턴을 돌린다.
         evidence.forEach((id, pat) -> {
+            if (!pat.matcher(text).find()) return;
             List<String> hits = f.evidence.computeIfAbsent(id, k -> new ArrayList<>());
-            if (hits.size() < 3 && pat.matcher(text).find()) hits.add(rel);
+            if (hits.size() < 3) hits.add(rel);
         });
     }
 
@@ -132,7 +134,7 @@ public final class Collector {
     /** Boot 버전만 있고 Security/Framework/GraphQL 이 명시되지 않았으면 spring-boot-dependencies 표로 채운다. */
     private void fillFromBom(Facts f) {
         String boot = f.deps.get("spring-boot");
-        if (boot == null || rules.bootBom() == null) return;
+        if (boot == null) return;
         Map<String, String> row = rules.bootBom().get(boot);
         String tag = "bom";
         if (row == null) {
@@ -162,7 +164,7 @@ public final class Collector {
         }
     }
 
-    static String ext(String name) {
+    private static String ext(String name) {
         int i = name.lastIndexOf('.');
         return i < 0 ? "" : name.substring(i + 1);
     }
@@ -172,7 +174,7 @@ public final class Collector {
         return null;
     }
 
-    private static void find(Pattern p, String text, java.util.function.Consumer<Matcher> each) {
+    private static void find(Pattern p, String text, Consumer<Matcher> each) {
         Matcher m = p.matcher(text);
         while (m.find()) each.accept(m);
     }

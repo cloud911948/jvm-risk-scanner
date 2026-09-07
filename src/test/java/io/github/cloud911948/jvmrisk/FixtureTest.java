@@ -20,9 +20,11 @@ class FixtureTest {
     private static final LocalDate TODAY = LocalDate.of(2026, 9, 3);
     private static final Rules RULES = Rules.bundled(); // jar 에 들어갈 것과 같은 파일
 
-    private static List<Finding> scan(String dir, Facts[] out) {
-        Facts f = new Collector(RULES).collect(Path.of(dir));
-        out[0] = f;
+    private static Facts collect(String dir) {
+        return new Collector(RULES).collect(Path.of(dir));
+    }
+
+    private static List<Finding> evaluate(Facts f) {
         return new Evaluator(RULES, TODAY).evaluate(f);
     }
 
@@ -32,16 +34,16 @@ class FixtureTest {
 
     @Test
     void gradleKtsWithEverything() {
-        Facts[] f = new Facts[1];
-        List<Finding> findings = scan("fixture", f);
+        Facts f = collect("fixture");
+        List<Finding> findings = evaluate(f);
         Set<String> ids = ids(findings);
         String titles = findings.stream().map(Finding::title).collect(Collectors.joining(" | "));
 
-        assertEquals(Set.of("21"), f[0].jdk);
-        assertEquals("4.0.8", f[0].deps.get("spring-boot"));
-        assertEquals("7.0.6", f[0].deps.get("spring-security"));
-        assertEquals("2.0.4", f[0].deps.get("spring-graphql"));
-        assertTrue(f[0].images.contains(new Facts.Image("redis", "8.2.7")));
+        assertEquals(Set.of("21"), f.jdk);
+        assertEquals("4.0.8", f.deps.get("spring-boot"));
+        assertEquals("7.0.6", f.deps.get("spring-security"));
+        assertEquals("2.0.4", f.deps.get("spring-graphql"));
+        assertTrue(f.images.contains(new Facts.Image("redis", "8.2.7")));
         for (String must : List.of("JDK27-GC-DEFAULT", "JDK27-COH-DEFAULT", "JDK27-COH-UNSAFE", "JDK27-COH-LAYOUT-TOOLS",
                 "JDK27-COH-AGENT", "JDK27-JFR-REDACT", "EOL-SOON", "CVE-2026-59270", "CVE-2026-59285", "CVE-2026-41707",
                 "CVE-2026-47841", "CVE-2026-47877", "CVE-2026-81934")) {
@@ -53,22 +55,22 @@ class FixtureTest {
 
     @Test
     void versionCatalogAliasResolvesThroughBom() {
-        Facts[] f = new Facts[1];
-        Set<String> ids = ids(scan("fixture2", f));
-        assertEquals("4.0.7", f[0].deps.get("spring-boot"));
-        assertEquals("7.0.6", f[0].deps.get("spring-security"));
-        assertEquals("bom", f[0].src.get("spring-security"));
+        Facts f = collect("fixture2");
+        Set<String> ids = ids(evaluate(f));
+        assertEquals("4.0.7", f.deps.get("spring-boot"));
+        assertEquals("7.0.6", f.deps.get("spring-security"));
+        assertEquals("bom", f.src.get("spring-security"));
         assertTrue(ids.contains("CVE-2026-59270"), ids.toString());
         assertFalse(ids.contains("DEP-ESTIMATED"));
     }
 
     @Test
     void mavenBomImportFallsBackToNearestPatch() {
-        Facts[] f = new Facts[1];
-        Set<String> ids = ids(scan("fixture3", f));
-        assertEquals("3.5.13", f[0].deps.get("spring-boot"));
-        assertEquals("6.5.9", f[0].deps.get("spring-security"));
-        assertEquals("bom~", f[0].src.get("spring-security"));
+        Facts f = collect("fixture3");
+        Set<String> ids = ids(evaluate(f));
+        assertEquals("3.5.13", f.deps.get("spring-boot"));
+        assertEquals("6.5.9", f.deps.get("spring-security"));
+        assertEquals("bom~", f.src.get("spring-security"));
         assertTrue(ids.containsAll(List.of("DEP-ESTIMATED", "EOL-PAST", "EOL-SOON", "CVE-2026-59270")), ids.toString());
     }
 

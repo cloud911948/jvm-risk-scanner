@@ -1,9 +1,9 @@
 package io.github.cloud911948.jvmrisk;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -28,21 +28,9 @@ public final class Report {
     }
 
     public static String json(Facts f, List<Finding> findings) {
-        Map<String, Object> facts = new LinkedHashMap<>();
-        facts.put("jdk", f.jdk);
-        facts.put("flags", f.flags);
-        facts.put("deps", f.deps);
-        facts.put("src", f.src);
-        facts.put("images", f.images.stream().map(Facts.Image::toString).toList());
-        facts.put("unsafe", f.unsafe);
-        facts.put("jfr", f.jfr);
-        facts.put("agents", f.agents);
-        facts.put("boot_all", f.bootAll);
-        facts.put("evidence", f.evidence);
         try {
-            return new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT)
-                    .writeValueAsString(Map.of("facts", facts, "findings", findings));
-        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            return new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT).writeValueAsString(Map.of("facts", f, "findings", findings));
+        } catch (JsonProcessingException e) {
             throw new IllegalStateException(e);
         }
     }

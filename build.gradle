@@ -1,6 +1,5 @@
 plugins {
     id 'java'
-    id 'application'
 }
 
 group = 'io.github.cloud911948'
@@ -22,16 +21,12 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
-application {
-    mainClass = 'io.github.cloud911948.jvmrisk.Main'
-}
-
 tasks.named('test') { useJUnitPlatform() }
 
 // 단일 실행 jar. GitHub Action 과 로컬에서 `java -jar build/libs/jvm-risk-scanner.jar <dir>` 로 쓴다.
 tasks.register('fatJar', Jar) {
     archiveFileName = 'jvm-risk-scanner.jar'
-    manifest { attributes 'Main-Class': application.mainClass }
+    manifest { attributes 'Main-Class': 'io.github.cloud911948.jvmrisk.Main' }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from sourceSets.main.output
     from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }

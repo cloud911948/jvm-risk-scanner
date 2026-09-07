@@ -1,5 +1,7 @@
 package io.github.cloud911948.jvmrisk;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -9,6 +11,7 @@ import java.util.TreeSet;
 
 /** 저장소에서 긁어낸 사실. 판단은 하지 않는다. 판단은 {@link Evaluator} 가 한다. */
 public final class Facts {
+    @JsonIgnore
     public final Path root;
     public final TreeSet<String> jdk = new TreeSet<>();
     public final TreeSet<String> flags = new TreeSet<>();
